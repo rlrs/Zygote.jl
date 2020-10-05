@@ -193,17 +193,27 @@ end
 
 @generated pair(::Val{k}, v) where k = :($k = v,)
 
+# @adjoint function literal_getproperty(x, ::Val{f}) where f
+#   val = getproperty(x, f)
+#   function back(Δ)
+#     accum_param(__context__, val, Δ) === nothing && return
+#     if isimmutable(x)
+#       ((;nt_nothing(x)...,pair(Val(f), Δ)...), nothing)
+#     else
+#       dx = grad_mut(__context__, x)
+#       @show dx[] = (;dx[]...,pair(Val(f),accum(getfield(dx[], f), Δ))...)
+#       return (dx,nothing)
+#     end
+#   end
+#   unwrap(val), back
+# end
+
 @adjoint function literal_getproperty(x, ::Val{f}) where f
   val = getproperty(x, f)
   function back(Δ)
     accum_param(__context__, val, Δ) === nothing && return
-    if isimmutable(x)
-      ((;nt_nothing(x)...,pair(Val(f), Δ)...), nothing)
-    else
-      dx = grad_mut(__context__, x)
-      dx[] = (;dx[]...,pair(Val(f),accum(getfield(dx[], f), Δ))...)
-      return (dx,nothing)
-    end
+    @show dx = (;nt_nothing(x)...,pair(Val(f), Δ)...)
+    return (Ref{Any}(dx), nothing)
   end
   unwrap(val), back
 end
