@@ -212,8 +212,18 @@ end
   val = getproperty(x, f)
   function back(Δ)
     accum_param(__context__, val, Δ) === nothing && return
-    @show dx = (;nt_nothing(x)...,pair(Val(f), Δ)...)
-    return (Ref{Any}(dx), nothing)
+    ch = cache(__context__)
+    if haskey(ch, x)
+      dx = ch[x]
+    else
+      #ch[x] = Ref{Any}(nt_nothing(x))
+      ch[x] = nt_nothing(x)
+      dx = ch[x]
+    end
+    #@show dx[] = (;dx[]..., pair(Val(f), Δ)...)
+    #@show dx[] = (;dx[]..., pair(Val(f), accum(getfield(dx[], f), Δ))...)
+    dx = (;dx..., pair(Val(f), Δ)...)
+    return (dx, nothing)
   end
   unwrap(val), back
 end
