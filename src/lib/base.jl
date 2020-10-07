@@ -37,11 +37,27 @@ end
 end
 
 @adjoint! function setindex!(d::AbstractDict, v, k)
-  setindex!(d, v, k), function (_)
-    Δ = get(grad_mut(__context__, d), k, nothing)
+  ret = setindex!(d, v, k)
+  ret, function (_)
+    idx = Base.ht_keyindex(copyd, k)
+    Δ = idx >= 0 ? grad_mut(__context__, d).vals[idx] : nothing
     delete!(grad_mut(__context__, d), k)
     (nothing, Δ, nothing)
   end
+end
+
+@adjoint function literal_getproperty(x::AbstractDict, ::Val{f}) where f
+  val = getproperty(x, f)
+  function back(Δ)
+    accum_param(__context__, val, Δ) === nothing && return
+    dx = grad_mut(__context__, x)
+    field = getfield(dx, f)
+    field = accum(field, Δ)
+    field = convert(Array{Any, 1}, field)
+    setfield!(dx, f, field)
+    return (dx,nothing)
+  end
+  unwrap(val), back
 end
 
 # Channels

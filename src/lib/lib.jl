@@ -2,6 +2,8 @@ using Base: RefValue
 
 # Interfaces
 
+undefToNothing(x::AbstractArray) = [isassigned(x, i) ? x[i] : nothing for i in 1:length(x)]
+
 accum() = nothing
 accum(x) = x
 
@@ -13,7 +15,7 @@ accum(x, y) =
 accum(x, y, zs...) = accum(accum(x, y), zs...)
 
 accum(x::Tuple, y::Tuple) = accum.(x, y)
-accum(x::AbstractArray, y::AbstractArray) = accum.(x, y)
+accum(x::AbstractArray, y::AbstractArray) = accum.(undefToNothing(x), undefToNothing(y))
 
 @generated function accum(x::NamedTuple, y::NamedTuple)
   grad(x) = x in fieldnames(y) ? :(y.$x) : :nothing
@@ -193,40 +195,39 @@ end
 
 @generated pair(::Val{k}, v) where k = :($k = v,)
 
-# @adjoint function literal_getproperty(x, ::Val{f}) where f
-#   val = getproperty(x, f)
-#   function back(Δ)
-#     accum_param(__context__, val, Δ) === nothing && return
-#     if isimmutable(x)
-#       ((;nt_nothing(x)...,pair(Val(f), Δ)...), nothing)
-#     else
-#       dx = grad_mut(__context__, x)
-#       @show dx[] = (;dx[]...,pair(Val(f),accum(getfield(dx[], f), Δ))...)
-#       return (dx,nothing)
-#     end
-#   end
-#   unwrap(val), back
-# end
-
 @adjoint function literal_getproperty(x, ::Val{f}) where f
   val = getproperty(x, f)
   function back(Δ)
     accum_param(__context__, val, Δ) === nothing && return
-    ch = cache(__context__)
-    if haskey(ch, x)
-      dx = ch[x]
+    if isimmutable(x)
+      ((;nt_nothing(x)...,pair(Val(f), Δ)...), nothing)
     else
-      #ch[x] = Ref{Any}(nt_nothing(x))
-      ch[x] = nt_nothing(x)
-      dx = ch[x]
+      dx = grad_mut(__context__, x)
+      @show dx[] = (;dx[]...,pair(Val(f),accum(getfield(dx[], f), Δ))...)
+      return (dx,nothing)
     end
-    #@show dx[] = (;dx[]..., pair(Val(f), Δ)...)
-    #@show dx[] = (;dx[]..., pair(Val(f), accum(getfield(dx[], f), Δ))...)
-    dx = (;dx..., pair(Val(f), Δ)...)
-    return (dx, nothing)
   end
   unwrap(val), back
 end
+
+# @adjoint function literal_getproperty(x, ::Val{f}) where f
+#   val = getproperty(x, f)
+#   function back(Δ)
+#     accum_param(__context__, val, Δ) === nothing && return
+#     ch = cache(__context__)
+#     if haskey(ch, x)
+#       dx = ch[x]
+#     else
+#       ch[x] = Ref{Any}(nt_nothing(x))
+#       #ch[x] = nt_nothing(x)
+#       dx = ch[x]
+#     end
+#     dx[] = (;dx[]...,pair(Val(f),accum(getfield(dx[], f), Δ))...)
+#     ch[x] = dx
+#     return (dx, nothing)
+#   end
+#   unwrap(val), back
+# end
 
 _pullback(cx::Context, ::typeof(getproperty), x, f::Symbol) =
   _pullback(cx, literal_getproperty, x, Val(f))
@@ -240,7 +241,7 @@ _pullback(cx::Context, ::typeof(literal_getindex), x::NamedTuple, ::Val{f}) wher
 _pullback(cx::Context, ::typeof(literal_getproperty), x::Tuple, ::Val{f}) where f =
   _pullback(cx, literal_getindex, x, Val(f))
 
-grad_mut(x) = Ref{Any}(nt_nothing(x))
+grad_mut(x) = @show Ref{Any}(nt_nothing(x))
 
 function grad_mut(cx::Context, x)
   ch = cache(cx)
