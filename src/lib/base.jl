@@ -39,7 +39,7 @@ end
 @adjoint! function setindex!(d::AbstractDict, v, k)
   ret = setindex!(d, v, k)
   ret, function (_)
-    idx = Base.ht_keyindex(copyd, k)
+    idx = Base.ht_keyindex(d, k)
     Δ = idx >= 0 ? grad_mut(__context__, d).vals[idx] : nothing
     delete!(grad_mut(__context__, d), k)
     (nothing, Δ, nothing)
